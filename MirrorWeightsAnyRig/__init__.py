@@ -1,10 +1,10 @@
 bl_info = {
     "name": "MirrorWeightsAnyRig",
     "author": "Zack3D",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (3, 6, 0),
-    "location": "View3D > N 面板 > 鏡像權重",
-    "description": "在任何命名慣例的骨架上鏡像權重（Mixamo、Character Creator、VRM、Biped、Daz…），不改動任何骨骼或群組名稱",
+    "location": "View3D > N-panel > Mirror Weights",
+    "description": "Mirror weights on any rig naming convention (Mixamo, Character Creator, VRM, Biped, Daz…) without renaming any bone or group",
     "category": "Rigging",
 }
 
@@ -15,6 +15,91 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty
 from bpy.types import Operator, Panel, PropertyGroup
 from mathutils import Vector
 from mathutils.kdtree import KDTree
+
+
+# ─────────────────────────────────────────────────────────────
+# 介面翻譯（i18n）：程式裡的 UI 字串一律用英文當「原文」，
+# 另附繁中譯文表。跟著 Blender 介面語言走——
+#   英文介面 → 顯示英文原文
+#   繁中／簡中介面 → 都顯示繁體中文（阿哲不要簡體）
+#
+# 繁中譯文同時掛在四個語言代碼上：
+#   zh_HANT（4.0+ 繁中）、zh_TW（3.6 繁中）、
+#   zh_HANS（4.0+ 簡中）、zh_CN（3.6 簡中）
+# 簡體代碼也指向繁中，所以使用者選簡體看到的仍是繁體。
+# ─────────────────────────────────────────────────────────────
+
+# 英文原文 → 繁體中文
+_ZH = {
+    # 面板／分頁
+    "Mirror Weights": "鏡像權重",
+    "Mirror all:": "鏡像全部：",
+    "Detected: %s": "偵測到：%s",
+    "Matched %d left/right pairs": "配出 %d 對左右群組",
+    "Naming convention not recognized": "認不出命名慣例",
+    "Choose the naming mode manually": "請手動指定命名模式",
+    # 命名模式設定
+    "Naming Convention": "命名模式",
+    "Left/right naming convention of bones and vertex groups": "骨骼與頂點群組的左右命名慣例",
+    "Auto-detect": "自動偵測",
+    "Scan vertex group names and auto-detect the naming convention": "掃描頂點群組名稱，自動判斷是哪一種命名慣例",
+    "Symmetry Tolerance": "對稱容差",
+    "Allowed positional error when finding mirror vertices. Raise it if the model is slightly asymmetric":
+        "找鏡像頂點時允許的位置誤差。模型稍微不對稱時可調大",
+    "Include Center Groups": "一併處理中線群組",
+    "Groups with no left/right side (Hips, Spine) are mirrored across X onto themselves":
+        "Hips、Spine 這種拆不出左右的群組，沿 X 翻面蓋到自己身上",
+    # 鏡像所選骨骼
+    "Mirror Selected Bones' Weights": "鏡像所選骨骼的權重",
+    "Use the selected bones as the source and mirror their weights to the opposite side":
+        "以所選骨骼為來源，把權重鏡像到對面的骨骼上",
+    "Center Bone Direction": "中線骨骼方向",
+    "When a center bone (Hips, Spine…) is selected, which side to mirror from":
+        "選到 Hips、Spine 這種中線骨骼時，要以哪一側為準翻面",
+    # 鏡像全部
+    "Mirror All Weights": "鏡像全部權重",
+    "Direction": "方向",
+    "Use the -X side as the source, overwrite the +X side": "以 -X 側的權重為準，蓋掉 +X 側",
+    "Use the +X side as the source, overwrite the -X side": "以 +X 側的權重為準，蓋掉 -X 側",
+    "Use the -X side as the source and mirror it over the +X side. In front view (Numpad 1), -X is on the left of the screen":
+        "以 -X 側的權重為準，鏡像蓋掉 +X 側。前視圖（Numpad 1）下 -X 在畫面左側",
+    "Use the +X side as the source and mirror it over the -X side. In front view (Numpad 1), +X is on the right of the screen":
+        "以 +X 側的權重為準，鏡像蓋掉 -X 側。前視圖（Numpad 1）下 +X 在畫面右側",
+    # 回報訊息
+    "This object has no armature modifier": "這個物件沒有骨架修改器",
+    "No bones selected — Ctrl-click bones in weight paint mode":
+        "沒有選到骨骼——請在權重繪製模式下按住 Ctrl 點選骨骼",
+    "No mirror vertex pairs found — the model may be asymmetric, or the tolerance too small":
+        "找不到任何鏡像頂點對——模型可能不對稱，或容差太小",
+    "Mirrored %d groups (convention: %s)": "已鏡像 %d 個群組（慣例：%s）",
+    "; skipped %d with no matching group": "；找不到對應群組而略過 %d 個",
+    "Could not match any left/right pairs with the \"%s\" convention — please choose the correct naming mode":
+        "用「%s」慣例配不出任何左右成對的群組——請改選正確的命名模式",
+    "Mirrored %d pairs (convention: %s)": "已鏡像 %d 對群組（慣例：%s）",
+    " + %d center groups": "＋%d 個中線群組",
+    # 附加元件清單裡的說明
+    "Mirror weights on any rig naming convention (Mixamo, Character Creator, VRM, Biped, Daz…) without renaming any bone or group":
+        "在任何命名慣例的骨架上鏡像權重（Mixamo、Character Creator、VRM、Biped、Daz…），不改動任何骨骼或群組名稱",
+}
+
+# 自訂翻譯 context：與 Blender 內建字串（預設 context "*"）分開。
+# 「Mirror Weights」「Direction」這類通用字，Blender 自己就有簡體翻譯；
+# 若掛在預設 context，某些版本（實測 3.6 選簡體）會被內建簡體蓋掉。
+# 掛在專屬 context 就永遠只認我們的繁中，全版本一致。
+I18N_CTX = "MirrorWeightsAnyRig"
+
+_ZH_CTX = {(I18N_CTX, en): zh for en, zh in _ZH.items()}
+translations_dict = {
+    "zh_HANT": _ZH_CTX,   # 繁中（4.0+）
+    "zh_TW": _ZH_CTX,     # 繁中（3.6）
+    "zh_HANS": _ZH_CTX,   # 簡中（4.0+）→ 也顯示繁中
+    "zh_CN": _ZH_CTX,     # 簡中（3.6）→ 也顯示繁中
+}
+
+
+def _t(msgid):
+    """把英文原文翻成目前介面語言（英文介面回傳原文）。"""
+    return bpy.app.translations.pgettext_iface(msgid, I18N_CTX)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -51,11 +136,11 @@ _PATTERNS = {
 }
 
 _PRESET_ITEMS = [
-    ("AUTO", "自動偵測", "掃描頂點群組名稱，自動判斷是哪一種命名慣例"),
-    ("BLENDER", "Blender / Rigify / ARP / UE5", "arm.L、DEF-upper_arm.L、thigh_l"),
-    ("LEFTRIGHT", "Mixamo / Maya HumanIK", "mixamorig:LeftArm、Character1_LeftArm"),
-    ("MIDDLE", "Character Creator / VRM / Biped", "CC_Base_L_Upperarm、J_Bip_L_UpperArm、Bip001 L UpperArm"),
-    ("DAZ", "Daz Genesis", "lShin、rForearmBend"),
+    ("AUTO", "Auto-detect", "Scan vertex group names and auto-detect the naming convention"),
+    ("BLENDER", "Blender / Rigify / ARP / UE5", "arm.L, DEF-upper_arm.L, thigh_l"),
+    ("LEFTRIGHT", "Mixamo / Maya HumanIK", "mixamorig:LeftArm, Character1_LeftArm"),
+    ("MIDDLE", "Character Creator / VRM / Biped", "CC_Base_L_Upperarm, J_Bip_L_UpperArm, Bip001 L UpperArm"),
+    ("DAZ", "Daz Genesis", "lShin, rForearmBend"),
 ]
 
 # 偵測順序：越專一的排前面，避免 MIDDLE 把 BLENDER 的名字搶走。
@@ -279,22 +364,24 @@ class _MirrorBase:
         preset = resolve_preset(ob, st)
         mmap = build_mirror_map(ob.data, st.tolerance)
         if not mmap:
-            self.report({"ERROR"}, "找不到任何鏡像頂點對——模型可能不對稱，或容差太小")
+            self.report({"ERROR"}, _t("No mirror vertex pairs found — the model may be asymmetric, or the tolerance too small"))
             return None
         return ob, st, preset, mmap
 
 
 class MWAR_OT_mirror_selected(_MirrorBase, Operator):
     bl_idname = "mwar.mirror_selected"
-    bl_label = "鏡像所選骨骼的權重"
-    bl_description = "以所選骨骼為來源，把權重鏡像到對面的骨骼上"
+    bl_label = "Mirror Selected Bones' Weights"
+    bl_description = "Use the selected bones as the source and mirror their weights to the opposite side"
+    bl_translation_context = I18N_CTX
     bl_options = {"REGISTER", "UNDO"}
 
     center_direction: EnumProperty(
-        name="中線骨骼方向",
-        description="選到 Hips、Spine 這種中線骨骼時，要以哪一側為準翻面",
+        name="Center Bone Direction",
+        description="When a center bone (Hips, Spine…) is selected, which side to mirror from",
         items=[("N2P", "-X → +X", ""), ("P2N", "+X → -X", "")],
         default="N2P",
+        translation_context=I18N_CTX,
     )
 
     def execute(self, context):
@@ -306,12 +393,12 @@ class MWAR_OT_mirror_selected(_MirrorBase, Operator):
         arm = next((m.object for m in ob.modifiers
                     if m.type == "ARMATURE" and m.object), None)
         if arm is None:
-            self.report({"ERROR"}, "這個物件沒有骨架修改器")
+            self.report({"ERROR"}, _t("This object has no armature modifier"))
             return {"CANCELLED"}
 
         sel = selected_bone_names(arm)
         if not sel:
-            self.report({"ERROR"}, "沒有選到骨骼——請在權重繪製模式下按住 Ctrl 點選骨骼")
+            self.report({"ERROR"}, _t("No bones selected — Ctrl-click bones in weight paint mode"))
             return {"CANCELLED"}
 
         vfilter = selected_vert_filter(ob)
@@ -340,23 +427,25 @@ class MWAR_OT_mirror_selected(_MirrorBase, Operator):
             done += 1
 
         ob.data.update()
-        msg = f"已鏡像 {done} 個群組（慣例：{preset}）"
+        msg = _t("Mirrored %d groups (convention: %s)") % (done, preset)
         if skipped:
-            msg += f"；找不到對應群組而略過 {len(skipped)} 個"
+            msg += _t("; skipped %d with no matching group") % len(skipped)
         self.report({"INFO"}, msg)
         return {"FINISHED"}
 
 
 class MWAR_OT_mirror_all(_MirrorBase, Operator):
     bl_idname = "mwar.mirror_all"
-    bl_label = "鏡像全部權重"
+    bl_label = "Mirror All Weights"
+    bl_translation_context = I18N_CTX
     bl_options = {"REGISTER", "UNDO"}
 
     direction: EnumProperty(
-        name="方向",
-        items=[("N2P", "-X → +X", "以 -X 側的權重為準，蓋掉 +X 側"),
-               ("P2N", "+X → -X", "以 +X 側的權重為準，蓋掉 -X 側")],
+        name="Direction",
+        items=[("N2P", "-X → +X", "Use the -X side as the source, overwrite the +X side"),
+               ("P2N", "+X → -X", "Use the +X side as the source, overwrite the -X side")],
         default="N2P",
+        translation_context=I18N_CTX,
     )
 
     @classmethod
@@ -364,8 +453,10 @@ class MWAR_OT_mirror_all(_MirrorBase, Operator):
         # 講軸向，不講「左右」。角色的左邊在前視圖底下會出現在畫面右邊，
         # 「左→右」兩種讀法剛好相反，是最容易搞混的講法。
         if props.direction == "N2P":
-            return "以 -X 側的權重為準，鏡像蓋掉 +X 側。前視圖（Numpad 1）下 -X 在畫面左側"
-        return "以 +X 側的權重為準，鏡像蓋掉 -X 側。前視圖（Numpad 1）下 +X 在畫面右側"
+            return _t("Use the -X side as the source and mirror it over the +X side. "
+                      "In front view (Numpad 1), -X is on the left of the screen")
+        return _t("Use the +X side as the source and mirror it over the -X side. "
+                  "In front view (Numpad 1), +X is on the right of the screen")
 
     def execute(self, context):
         prep = self._prep(context)
@@ -376,7 +467,7 @@ class MWAR_OT_mirror_all(_MirrorBase, Operator):
         pairs, centers = pair_groups(ob, preset)
         if not pairs:
             self.report({"ERROR"},
-                        f"用「{preset}」慣例配不出任何左右成對的群組——請改選正確的命名模式")
+                        _t("Could not match any left/right pairs with the \"%s\" convention — please choose the correct naming mode") % preset)
             return {"CANCELLED"}
 
         vfilter = selected_vert_filter(ob)
@@ -397,9 +488,9 @@ class MWAR_OT_mirror_all(_MirrorBase, Operator):
                 n_center += 1
 
         ob.data.update()
-        msg = f"已鏡像 {len(pairs)} 對群組（慣例：{preset}）"
+        msg = _t("Mirrored %d pairs (convention: %s)") % (len(pairs), preset)
         if n_center:
-            msg += f"＋{n_center} 個中線群組"
+            msg += _t(" + %d center groups") % n_center
         self.report({"INFO"}, msg)
         return {"FINISHED"}
 
@@ -410,29 +501,33 @@ class MWAR_OT_mirror_all(_MirrorBase, Operator):
 
 class MWAR_Settings(PropertyGroup):
     preset: EnumProperty(
-        name="命名模式",
-        description="骨骼與頂點群組的左右命名慣例",
+        name="Naming Convention",
+        description="Left/right naming convention of bones and vertex groups",
         items=_PRESET_ITEMS,
         default="AUTO",
+        translation_context=I18N_CTX,
     )
     tolerance: FloatProperty(
-        name="對稱容差",
-        description="找鏡像頂點時允許的位置誤差。模型稍微不對稱時可調大",
+        name="Symmetry Tolerance",
+        description="Allowed positional error when finding mirror vertices. Raise it if the model is slightly asymmetric",
         default=0.0001, min=0.0, max=1.0, precision=5, step=0.01,
+        translation_context=I18N_CTX,
     )
     include_center: BoolProperty(
-        name="一併處理中線群組",
-        description="Hips、Spine 這種拆不出左右的群組，沿 X 翻面蓋到自己身上",
+        name="Include Center Groups",
+        description="Groups with no left/right side (Hips, Spine) are mirrored across X onto themselves",
         default=True,
+        translation_context=I18N_CTX,
     )
 
 
 class MWAR_PT_panel(Panel):
-    bl_label = "鏡像權重"
+    bl_label = "Mirror Weights"
     bl_idname = "MWAR_PT_panel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "鏡像權重"
+    bl_category = "Mirror Weights"
+    bl_translation_context = I18N_CTX
 
     @classmethod
     def poll(cls, context):
@@ -452,17 +547,19 @@ class MWAR_PT_panel(Panel):
             label = next((i[1] for i in _PRESET_ITEMS if i[0] == detected), detected)
             box = layout.box()
             if n:
-                box.label(text=f"偵測到：{label}", icon="CHECKMARK")
-                box.label(text=f"配出 {n} 對左右群組")
+                box.label(text=_t("Detected: %s") % _t(label), icon="CHECKMARK")
+                box.label(text=_t("Matched %d left/right pairs") % n)
             else:
-                box.label(text="認不出命名慣例", icon="ERROR")
-                box.label(text="請手動指定命名模式")
+                box.label(text=_t("Naming convention not recognized"), icon="ERROR")
+                box.label(text=_t("Choose the naming mode manually"))
 
         layout.separator()
-        layout.operator("mwar.mirror_selected", icon="BONE_DATA")
+        layout.operator("mwar.mirror_selected",
+                        text=_t("Mirror Selected Bones' Weights"),
+                        text_ctxt=I18N_CTX, icon="BONE_DATA")
 
         col = layout.column(align=True)
-        col.label(text="鏡像全部：")
+        col.label(text=_t("Mirror all:"), text_ctxt=I18N_CTX)
         row = col.row(align=True)
         row.operator("mwar.mirror_all", text="-X → +X").direction = "N2P"
         row.operator("mwar.mirror_all", text="+X → -X").direction = "P2N"
@@ -482,6 +579,7 @@ classes = (
 
 
 def register():
+    bpy.app.translations.register(__name__, translations_dict)
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.Scene.mwar = PointerProperty(type=MWAR_Settings)
@@ -491,6 +589,10 @@ def unregister():
     del bpy.types.Scene.mwar
     for c in reversed(classes):
         bpy.utils.unregister_class(c)
+    try:
+        bpy.app.translations.unregister(__name__)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
