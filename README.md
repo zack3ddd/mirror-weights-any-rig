@@ -1,5 +1,68 @@
 <!-- 封面圖：在 GitHub 網頁編輯此檔，把封面圖拖到這一行上方，會自動上傳並產生 <img> 連結 -->
 
+# MirrorWeightsAnyRig
+
+**English** · [繁體中文](#繁體中文)
+
+Models you download from elsewhere — Mixamo, Character Creator, VRM, 3ds Max, Daz… — often won't mirror vertex weights in Blender. This add-on mirrors them **in one click**, and **without renaming a single bone or vertex group**.
+
+> Made by Zack3D (with AI assistance).
+
+## Why does native mirroring fail?
+
+Blender's mirror only recognizes `Left`/`Right`/`L`/`R` when it sits at the **very start or very end** of a name. Many rigs aren't named that way:
+
+| Rig | Example bone | Native mirror |
+|---|---|---|
+| Mixamo | `mixamorig:LeftArm` | ❌ blocked by the `mixamorig:` prefix |
+| Character Creator | `CC_Base_L_Upperarm` | ❌ L sits in the middle |
+| VRoid / VRM | `J_Bip_L_UpperArm` | ❌ L sits in the middle |
+| 3ds Max Biped | `Bip001 L UpperArm` | ❌ L sits in the middle |
+| Daz Genesis | `lShin` | ❌ no separator |
+| Rigify / Auto-Rig Pro / UE5 | `upper_arm.L`, `thigh_l` | ✅ already mirrorable |
+
+As long as L/R isn't at the head or tail of the name, native mirroring can't see it — the problem is the **name**, not the weights. This add-on understands these naming conventions and works around that limit.
+
+## Features
+
+- **Auto-detects the naming convention:** Mixamo, Rigify, Auto-Rig Pro, UE5 / MetaHuman, Character Creator, VRM / VRoid, 3ds Max Biped, Daz Genesis, Maya HumanIK — usually no need to pick manually
+- **Mirror the selected bones' weights:** in weight-paint mode, mirror exactly the bones you selected
+- **Mirror all weights:** copy one whole side to the other in one click, choose `-X → +X` or `+X → -X`
+- **Never touches names:** everything happens only at the moment of the operation; bone and vertex-group names stay exactly as they were — so re-applying official animations later (e.g. with Mixamo tools) is completely unaffected
+- **Handles center bones:** Hips, Spine and other center-line bones are mirrored across the center
+- **Adjustable symmetry tolerance:** real character models are slightly asymmetric — raise the tolerance when no matching point is found
+
+## Installation
+
+1. Download the latest `.zip` from **Releases** on the right (no need to unzip)
+2. Open Blender → top menu **Edit › Preferences**
+3. Click **Add-ons** on the left → **Install from Disk…** (top-right)
+4. Select the `.zip` you downloaded → install
+5. Tick the checkbox next to "MirrorWeightsAnyRig" to enable it
+
+## Usage
+
+1. Select the rigged mesh → N-panel "Mirror Weights" tab
+2. Leave the naming mode on "Auto-detect"; the panel shows the rig it recognized and how many pairs it matched
+3. To mirror everything at once, press **`-X → +X`** or **`+X → -X`** (axis-based rather than "left/right", so the viewing angle can't confuse you)
+4. To mirror only a few bones: enter weight-paint mode, select the bones, then press "Mirror the selected bones' weights"
+
+> It uses the object's local X axis. In front view (Numpad 1), `-X` is on the left of your screen and `+X` is on the right.
+
+## Compatibility
+
+- Blender 3.6 / 4.5 / 5.0 / 5.2 LTS (all tested)
+
+## License
+
+Released under the **GNU GPL**. Author: Zack3D.
+
+---
+
+## 繁體中文
+
+[English ↑](#mirrorweightsanyrig)
+
 # MirrorWeightsAnyRig（跨命名骨架的鏡像權重）
 
 Mixamo、Character Creator、VRM、3ds Max、Daz⋯⋯ 這些從外面下載回來的模型，在 Blender 裡按「鏡像頂點群組」常常沒反應。這個外掛讓它們**一鍵鏡像權重**，而且**完全不改動任何骨骼或頂點群組的名字**。
