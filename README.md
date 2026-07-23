@@ -110,6 +110,10 @@ Blender 的鏡像功能只認得放在名字最開頭或最結尾的 `Left`／`R
 
 > 用的是物體局部空間的 X 軸。前視圖（Numpad 1）底下，`-X` 在畫面左側、`+X` 在畫面右側。
 
+## 教學
+
+[![YouTube 影片](https://img.youtube.com/vi/nzocxnqoJeA/maxresdefault.jpg)](https://www.youtube.com/watch?v=nzocxnqoJeA)
+
 ## 對應版本
 
 - Blender 3.6 / 4.5 / 5.0 / 5.2 LTS（皆通過測試）
